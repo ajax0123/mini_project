@@ -19,14 +19,19 @@ function ScoreSelector({
   value,
   onChange,
   label,
+  description,
 }: {
   value: number;
   onChange: (v: number) => void;
   label: string;
+  description?: string;
 }) {
   return (
     <div className="mb-5">
-      <p className="text-sm font-medium text-slate-600 mb-2">{label}</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium text-slate-600">{label}</p>
+        {description && <span className="text-xs text-slate-400">{description}</span>}
+      </div>
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -34,8 +39,8 @@ function ScoreSelector({
             onClick={() => onChange(n)}
             className={`w-10 h-10 rounded-full font-bold text-sm border-2 transition-all duration-200 ${
               value >= n
-                ? "bg-[#10B981] border-[#10B981] text-white"
-                : "border-slate-200 text-slate-400 hover:border-[#10B981]/50"
+                ? "bg-[#0A1628] border-[#0A1628] text-white"
+                : "border-slate-200 text-slate-400 hover:border-[#0A1628]/50"
             }`}
           >
             {n}
@@ -50,14 +55,19 @@ function ToggleSwitch({
   value,
   onChange,
   label,
+  description,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  description?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-4">
-      <span className="text-sm font-medium text-slate-600">{label}</span>
+    <div className="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <p className="text-sm font-medium text-slate-600">{label}</p>
+        {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
+      </div>
       <button
         onClick={() => onChange(!value)}
         className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
@@ -156,27 +166,64 @@ export default function ApplyPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/creditalt/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          surplus: state.surplus,
-          txnScore: state.txnScore,
-          utilityScore: state.utilityScore,
-          rentScore: state.rentScore,
-          insuranceScore: state.insuranceScore,
-          employmentStability: state.employmentStability,
-          avgBalance: state.avgBalance,
-          balanceMultiplier: state.balanceMultiplier,
-          missed30DaysFlag: state.missed30DaysFlag,
-          shockFlag: state.shockFlag,
-          emiFlag: state.emiFlag,
-        }),
-      });
+      // Client-side score calculation (same algorithm as backend)
+      const d = {
+        surplus: state.surplus,
+        txnScore: state.txnScore,
+        utilityScore: state.utilityScore,
+        rentScore: state.rentScore,
+        insuranceScore: state.insuranceScore,
+        employmentStability: state.employmentStability,
+        avgBalance: state.avgBalance,
+        balanceMultiplier: state.balanceMultiplier,
+        missed30DaysFlag: state.missed30DaysFlag,
+        shockFlag: state.shockFlag,
+        emiFlag: state.emiFlag,
+      };
 
-      if (!res.ok) throw new Error("Score calculation failed");
+      const balanceFactor = ([0.7, 1.0, 1.3][d.balanceMultiplier] as number) ?? 1.0;
 
-      const result = await res.json();
+      const riskNorm = Math.min(
+        1,
+        d.missed30DaysFlag * 0.30 +
+        d.shockFlag * 0.25 +
+        ((5 - d.txnScore) / 5) * 0.15 +
+        ((5 - d.utilityScore) / 5) * 0.15 +
+        ((5 - d.employmentStability) / 5) * 0.10 +
+        d.emiFlag * 0.05
+      );
+
+      const base =
+        (d.surplus * 0.30 +
+          d.txnScore * 8000 +
+          d.rentScore * 5000 +
+          d.utilityScore * 5000 +
+          d.insuranceScore * 4000 +
+          d.employmentStability * 10000 +
+          d.avgBalance * 0.05) * balanceFactor - riskNorm * 60000;
+
+      const eligible = Math.max(0, Math.min(base * 0.9, 500000));
+
+      const result = {
+        riskLabel: riskNorm < 0.3 ? "Low" : riskNorm < 0.6 ? "Medium" : "High",
+        riskNorm,
+        eligibleAmount: eligible,
+        lowerBound: eligible * 0.9,
+        upperBound: Math.min(eligible * 1.1, 500000),
+        featureContributions: [
+          { feature: "Surplus Income", value: d.surplus * 0.30 },
+          { feature: "Transaction Habit", value: d.txnScore * 8000 },
+          { feature: "Utility Payments", value: d.utilityScore * 5000 },
+          { feature: "Rent Regularity", value: d.rentScore * 5000 },
+          { feature: "Job Stability", value: d.employmentStability * 10000 },
+          { feature: "Insurance", value: d.insuranceScore * 4000 },
+          { feature: "Risk Penalty", value: -(riskNorm * 60000) },
+        ],
+      };
+
+      // Simulate brief processing delay for UX
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
       sessionStorage.setItem("creditalt_result", JSON.stringify(result));
       navigate("/results");
     } catch {
@@ -203,22 +250,17 @@ export default function ApplyPage() {
     <div className="min-h-screen bg-slate-50">
       <div className="bg-gradient-to-br from-[#0A1628] to-[#142238] py-10 px-4">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-6 text-center">Check Your Credit Eligibility</h1>
           <StepIndicator steps={STEPS} currentStep={currentStep} />
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-16">
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-16 ${currentStep === 1 || currentStep === 2 ? "max-w-4xl" : "max-w-2xl"}`}>
         <div
           key={stepKey.current}
           className={`bg-white rounded-3xl shadow-xl p-6 sm:p-10 ${animClass}`}
         >
           {currentStep === 0 && (
             <div>
-              <h2 className="text-xl font-bold text-[#0A1628] mb-2">Upload Your Documents</h2>
-              <p className="text-slate-500 text-sm mb-6">
-                Our AI will scan and extract key financial data automatically.
-              </p>
               <DocumentUploader onScanComplete={handleScanComplete} />
               {state.scanResults.length > 0 && (
                 <div className="mt-4 text-sm text-[#10B981] font-medium">
@@ -230,114 +272,214 @@ export default function ApplyPage() {
 
           {currentStep === 1 && (
             <div>
-              <h2 className="text-xl font-bold text-[#0A1628] mb-6">Financial Profile</h2>
+              <h2 className="text-2xl font-bold text-[#0A1628] mb-1">Financial Profile</h2>
+              <p className="text-slate-400 text-sm mb-6">Tell us about your monthly income and expenses.</p>
 
-              <SliderField
-                label="Monthly Income"
-                value={state.monthlyIncome}
-                onChange={(v) => update({ monthlyIncome: v })}
-                min={0}
-                max={200000}
-                fromDocument={state.scanResults.some((r) => r.extractedData.monthlyIncome)}
-              />
-              <SliderField
-                label="Surplus Income (Income - Expenses)"
-                value={state.surplus}
-                onChange={(v) => update({ surplus: v })}
-                min={0}
-                max={100000}
-              />
-              <SliderField
-                label="Average Bank Balance"
-                value={state.avgBalance}
-                onChange={(v) => update({ avgBalance: v })}
-                min={0}
-                max={500000}
-                fromDocument={state.scanResults.some((r) => r.extractedData.avgBalance)}
-              />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left: Form Fields */}
+                <div className="lg:col-span-2 border border-slate-200 rounded-2xl p-6 space-y-6">
+                  {/* Monthly Surplus Income */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold text-[#0A1628]">Monthly Surplus Income</p>
+                      <p className="text-sm font-bold text-[#0A1628]">₹{formatINR(state.surplus)}</p>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100000}
+                      value={state.surplus}
+                      onChange={(e) => update({ surplus: Number(e.target.value) })}
+                      className="w-full h-2 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#0A1628] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md"
+                      style={{
+                        background: `linear-gradient(to right, #0A1628 ${(state.surplus / 100000) * 100}%, #e2e8f0 ${(state.surplus / 100000) * 100}%)`
+                      }}
+                    />
+                    <p className="text-xs text-slate-400 mt-1">What's left after paying regular expenses?</p>
+                  </div>
 
-              <div className="mb-5">
-                <p className="text-sm font-medium text-slate-600 mb-2">Balance Multiplier (Stability)</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {["Low", "Medium", "High"].map((opt, i) => (
-                    <button
-                      key={opt}
-                      onClick={() => update({ balanceMultiplier: i })}
-                      className={`rounded-xl py-3 text-sm font-semibold border-2 transition-all duration-200 ${
-                        state.balanceMultiplier === i
-                          ? "border-[#10B981] bg-[#10B981]/10 text-[#10B981]"
-                          : "border-slate-200 text-slate-500 hover:border-[#10B981]/40"
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
+                  {/* Average Monthly Bank Balance */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold text-[#0A1628]">Average Monthly Bank Balance</p>
+                      <p className="text-sm font-bold text-[#0A1628]">₹{formatINR(state.avgBalance)}</p>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={500000}
+                      value={state.avgBalance}
+                      onChange={(e) => update({ avgBalance: Number(e.target.value) })}
+                      className="w-full h-2 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#0A1628] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md"
+                      style={{
+                        background: `linear-gradient(to right, #0A1628 ${(state.avgBalance / 500000) * 100}%, #e2e8f0 ${(state.avgBalance / 500000) * 100}%)`
+                      }}
+                    />
+                  </div>
+
+                  {/* Balance Multiplier + Employment Stability Row */}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Balance Multiplier - Radio Style */}
+                    <div>
+                      <p className="text-sm font-semibold text-[#0A1628] mb-3">Balance Multiplier</p>
+                      <div className="flex flex-col gap-2">
+                        {["Low", "Medium", "High"].map((opt, i) => (
+                          <label
+                            key={opt}
+                            className="flex items-center gap-2 cursor-pointer group"
+                            onClick={() => update({ balanceMultiplier: i })}
+                          >
+                            <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                              state.balanceMultiplier === i
+                                ? "border-[#0A1628]"
+                                : "border-slate-300 group-hover:border-slate-400"
+                            }`}>
+                              {state.balanceMultiplier === i && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#0A1628]" />
+                              )}
+                            </span>
+                            <span className={`text-sm ${state.balanceMultiplier === i ? "font-semibold text-[#0A1628]" : "text-slate-500"}`}>
+                              {opt}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Employment Stability - Dropdown */}
+                    <div>
+                      <p className="text-sm font-semibold text-[#0A1628] mb-3">Employment Stability</p>
+                      <select
+                        value={state.employmentStability}
+                        onChange={(e) => update({ employmentStability: Number(e.target.value) })}
+                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 bg-white appearance-none cursor-pointer focus:outline-none focus:border-[#0A1628] transition-colors"
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 12px center',
+                        }}
+                      >
+                        <option value={1}>Freelancer</option>
+                        <option value={2}>Self Employed</option>
+                        <option value={3}>Salaried Private</option>
+                        <option value={4}>Salaried Government</option>
+                        <option value={5}>Senior Professional</option>
+                      </select>
+
+                      {/* Currently paying EMIs toggle */}
+                      <div className="flex items-center justify-between mt-5 border border-slate-200 rounded-xl px-4 py-3">
+                        <span className="text-sm text-slate-600">Currently paying EMIs?</span>
+                        <button
+                          onClick={() => {
+                            const v = !state.hasEMIs;
+                            update({ hasEMIs: v, emiFlag: v ? 1 : 0 });
+                          }}
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
+                            state.hasEMIs ? "bg-[#10B981]" : "bg-slate-300"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${
+                              state.hasEMIs ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Profile Snapshot */}
+                <div className="bg-[#0A1628] rounded-2xl p-6 text-white h-fit">
+                  <h3 className="text-base font-bold mb-5">Profile Snapshot</h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-slate-400">Surplus</p>
+                      <p className="text-xl font-black text-[#10B981]">₹{formatINR(state.surplus)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Avg Balance</p>
+                      <p className="text-xl font-black text-white">₹{formatINR(state.avgBalance)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Stability</p>
+                      <p className="text-lg font-bold text-white">
+                        {["Low", "Medium", "High"][state.balanceMultiplier]}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <ToggleSwitch
-                label="Regular Salary Income"
-                value={state.hasRegularSalary}
-                onChange={(v) => update({ hasRegularSalary: v })}
-              />
-              <ToggleSwitch
-                label="Active EMIs"
-                value={state.hasEMIs}
-                onChange={(v) => {
-                  update({ hasEMIs: v, emiFlag: v ? 1 : 0 });
-                }}
-              />
             </div>
           )}
 
           {currentStep === 2 && (
             <div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
                 <div>
-                  <h2 className="text-xl font-bold text-[#0A1628] mb-6">Behavioral Signals</h2>
+                  <div className="mb-8">
+                    <h2 className="text-3xl font-bold text-[#0A1628] mb-3">Alternative Behavior</h2>
+                    <p className="text-sm text-slate-500">
+                      How you manage everyday payments matters to us.
+                    </p>
+                  </div>
 
-                  <ScoreSelector
-                    label="UPI / Transaction Score"
-                    value={state.txnScore}
-                    onChange={(v) => update({ txnScore: v })}
-                  />
-                  <ScoreSelector
-                    label="Utility Bill Consistency"
-                    value={state.utilityScore}
-                    onChange={(v) => update({ utilityScore: v })}
-                  />
-                  <ScoreSelector
-                    label="Rent Payment Regularity"
-                    value={state.rentScore}
-                    onChange={(v) => update({ rentScore: v })}
-                  />
-                  <ScoreSelector
-                    label="Insurance Premium Payments"
-                    value={state.insuranceScore}
-                    onChange={(v) => update({ insuranceScore: v })}
-                  />
-                  <ScoreSelector
-                    label="Employment Stability"
-                    value={state.employmentStability}
-                    onChange={(v) => update({ employmentStability: v })}
-                  />
+                  <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6">
+                    <ScoreSelector
+                      label="Digital Transactions"
+                      description="1 = Rarely use digital, 5 = Daily UPI/Wallet user"
+                      value={state.txnScore}
+                      onChange={(v) => update({ txnScore: v })}
+                    />
+                    <ScoreSelector
+                      label="Rent Payment Consistency"
+                      description="1 = No fixed rent, 5 = Always pay on time"
+                      value={state.rentScore}
+                      onChange={(v) => update({ rentScore: v })}
+                    />
+                    <ScoreSelector
+                      label="Utility Bill Payments"
+                      description="1 = Often miss bills, 5 = Never missed a bill"
+                      value={state.utilityScore}
+                      onChange={(v) => update({ utilityScore: v })}
+                    />
+                    <ScoreSelector
+                      label="Insurance Premiums"
+                      description="1 = No insurance, 5 = All premiums paid on time"
+                      value={state.insuranceScore}
+                      onChange={(v) => update({ insuranceScore: v })}
+                    />
+                  </div>
 
-                  <div className="border-t border-slate-100 pt-4 mt-2">
+                  <div className="mt-6 bg-amber-50 border border-amber-100 rounded-3xl p-6">
                     <ToggleSwitch
-                      label="Missed payment in last 30 days"
+                      label="Missed 30-Day Payment"
+                      description="Missed any payment by 30+ days in last 6 months?"
                       value={state.missed30DaysFlag === 1}
                       onChange={(v) => update({ missed30DaysFlag: v ? 1 : 0 })}
                     />
                     <ToggleSwitch
-                      label="Income shock / job change recently"
+                      label="Financial Shock"
+                      description="Had a major medical or financial emergency recently?"
                       value={state.shockFlag === 1}
                       onChange={(v) => update({ shockFlag: v ? 1 : 0 })}
                     />
                   </div>
                 </div>
 
-                <div>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+                  <div className="mb-6">
+                    <p className="text-sm font-semibold text-slate-500 uppercase tracking-[0.2em]">
+                      Live AI Risk Preview
+                    </p>
+                  </div>
+
                   <RiskGauge riskNorm={computedRiskNorm} />
+
+                  <p className="mt-6 text-sm text-slate-500 text-center">
+                    Based on your behavioral signals. Lower risk increases approval chance.
+                  </p>
                 </div>
               </div>
             </div>
@@ -434,9 +576,9 @@ export default function ApplyPage() {
           {currentStep < STEPS.length - 1 ? (
             <button
               onClick={goNext}
-              className="flex-1 bg-[#10B981] hover:bg-[#059669] text-white font-bold py-3 rounded-2xl text-base shadow-lg hover:shadow-[#10B981]/30 transition-all duration-300 flex items-center justify-center gap-3"
+              className="flex-1 bg-[#0A1628] hover:bg-[#142238] text-white font-bold py-3 rounded-2xl text-base shadow-lg transition-all duration-300 flex items-center justify-center gap-3"
             >
-              Continue
+              {currentStep === 0 ? "Continue to Profile" : currentStep === 1 ? "Continue to Signals" : "Review & Submit"}
               <ArrowRight className="w-5 h-5" />
             </button>
           ) : (

@@ -10,13 +10,12 @@ interface Props {
 
 const DOCUMENT_TYPES = [
   "Bank Statement",
-  "Pay Slip",
-  "Electricity Bill",
-  "Rent Agreement",
-  "Insurance Policy",
-  "Netflix/OTT Receipt",
-  "UPI Statement",
-  "ITR Document",
+  "Mobile Payment Screenshot",
+  "Electricity/Utility Bill",
+  "Rent Receipt",
+  "Salary Slip",
+  "OTT Subscription Invoice",
+  "Insurance Premium Receipt",
 ];
 
 interface UploadedFile {
@@ -87,6 +86,7 @@ export default function DocumentUploader({ onScanComplete }: Props) {
       "application/pdf": [".pdf"],
       "image/jpeg": [".jpg", ".jpeg"],
       "image/png": [".png"],
+      "image/webp": [".webp"],
     },
   });
 
@@ -97,18 +97,19 @@ export default function DocumentUploader({ onScanComplete }: Props) {
   const latestScan = uploadedFiles.findLast((f) => f.scanResult)?.scanResult;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Document Type Selection */}
       <div>
-        <p className="text-sm font-medium text-slate-600 mb-3">Select Document Type</p>
+        <p className="text-sm font-medium text-slate-500 mb-3">What are you uploading?</p>
         <div className="flex flex-wrap gap-2">
           {DOCUMENT_TYPES.map((type) => (
             <button
               key={type}
               onClick={() => setSelectedDocType(type)}
-              className={`px-4 py-2 rounded-full border-2 text-sm font-medium transition-all duration-200 ${
+              className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-200 ${
                 selectedDocType === type
-                  ? "border-[#10B981] bg-[#10B981]/10 text-[#10B981]"
-                  : "border-slate-200 text-slate-500 hover:border-[#10B981]/50"
+                  ? "border-[#0A1628] bg-[#0A1628] text-white shadow-sm"
+                  : "border-slate-200 text-slate-600 hover:border-slate-400 bg-white"
               }`}
             >
               {type}
@@ -117,44 +118,44 @@ export default function DocumentUploader({ onScanComplete }: Props) {
         </div>
       </div>
 
+      {/* Upload Zone */}
       {scanning && uploadedFiles.some((f) => f.scanning) ? (
-        <div className="relative rounded-2xl overflow-hidden border border-[#10B981]/30 bg-slate-900 min-h-[160px]">
-          <div className="absolute inset-0 bg-[#0A1628]/60 flex flex-col items-center justify-center z-10">
-            <div className="w-8 h-8 border-[3px] border-[#10B981] border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-white font-medium">Scanning document...</p>
-            <div className="absolute left-0 right-0 h-0.5 bg-[#10B981]/70 animate-scan-line" />
+        <div className="relative rounded-xl overflow-hidden border-2 border-dashed border-[#10B981]/40 bg-slate-50 min-h-[200px]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+            <div className="w-10 h-10 border-[3px] border-[#10B981] border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-slate-700 font-medium">Scanning document...</p>
           </div>
-          <div className="h-40" />
         </div>
       ) : (
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors duration-300 ${
+          className={`border-2 border-dashed rounded-xl py-14 px-6 text-center cursor-pointer transition-all duration-300 ${
             isDragActive
-              ? "border-[#10B981] bg-[#10B981]/10"
-              : "border-slate-300 hover:border-[#10B981] bg-slate-50 hover:bg-[#10B981]/5"
+              ? "border-[#10B981] bg-[#10B981]/5"
+              : "border-slate-300 hover:border-slate-400 bg-white"
           }`}
         >
           <input {...getInputProps()} />
-          <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-600 font-medium">
-            {isDragActive ? "Drop your document here" : "Drag & drop or click to upload"}
+          <Upload className={`w-10 h-10 mx-auto mb-4 ${isDragActive ? "text-[#10B981]" : "text-slate-400"}`} />
+          <p className="text-slate-700 font-semibold text-base">
+            {isDragActive ? "Drop your file here" : "Drag & drop your file here"}
           </p>
-          <p className="text-sm text-slate-400 mt-1">Supports PDF, JPG, PNG — up to 15MB</p>
+          <p className="text-sm text-slate-400 mt-2">PDF, JPG, PNG, WEBP up to 10MB</p>
         </div>
       )}
 
+      {/* Uploaded Files List */}
       {uploadedFiles.length > 0 && (
-        <div className="flex gap-3 flex-wrap mt-4">
+        <div className="flex gap-3 flex-wrap">
           {uploadedFiles.map((uf, i) => (
             <div
               key={i}
-              className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
-                uf.error ? "bg-red-50 border border-red-200" : "bg-slate-100"
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm border ${
+                uf.error ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"
               }`}
             >
               <FileText className="w-4 h-4 text-[#10B981]" />
-              <span className="text-slate-700 max-w-[120px] truncate">{uf.file.name}</span>
+              <span className="text-slate-700 max-w-[140px] truncate">{uf.file.name}</span>
               {uf.scanning && (
                 <div className="w-3 h-3 border border-[#10B981] border-t-transparent rounded-full animate-spin" />
               )}
@@ -168,8 +169,9 @@ export default function DocumentUploader({ onScanComplete }: Props) {
         </div>
       )}
 
+      {/* Scan Results */}
       {latestScan && (
-        <div className="bg-[#10B981]/5 border border-[#10B981]/30 rounded-2xl p-5 animate-fade-up">
+        <div className="bg-[#10B981]/5 border border-[#10B981]/30 rounded-xl p-5 animate-fade-up">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="text-[#10B981] w-5 h-5" />
             <span className="font-semibold text-[#10B981]">Document Scanned Successfully</span>
