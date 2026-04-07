@@ -5,18 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ErrorResponse,
+  HealthStatus,
+  ScanDocumentBody,
+  ScanResult,
+  ScoreRequest,
+  ScoreResult,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +109,180 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Uploads a document and uses Claude to extract financial data
+ * @summary Scan a financial document using AI
+ */
+export const getScanDocumentUrl = () => {
+  return `/api/creditalt/scan-document`;
+};
+
+export const scanDocument = async (
+  scanDocumentBody: ScanDocumentBody,
+  options?: RequestInit,
+): Promise<ScanResult> => {
+  const formData = new FormData();
+  formData.append(`file`, scanDocumentBody.file);
+  formData.append(`documentType`, scanDocumentBody.documentType);
+
+  return customFetch<ScanResult>(getScanDocumentUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getScanDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanDocument>>,
+    TError,
+    { data: BodyType<ScanDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof scanDocument>>,
+  TError,
+  { data: BodyType<ScanDocumentBody> },
+  TContext
+> => {
+  const mutationKey = ["scanDocument"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof scanDocument>>,
+    { data: BodyType<ScanDocumentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return scanDocument(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ScanDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof scanDocument>>
+>;
+export type ScanDocumentMutationBody = BodyType<ScanDocumentBody>;
+export type ScanDocumentMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Scan a financial document using AI
+ */
+export const useScanDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanDocument>>,
+    TError,
+    { data: BodyType<ScanDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof scanDocument>>,
+  TError,
+  { data: BodyType<ScanDocumentBody> },
+  TContext
+> => {
+  return useMutation(getScanDocumentMutationOptions(options));
+};
+
+/**
+ * Calculates credit eligibility based on financial profile
+ * @summary Calculate credit risk score
+ */
+export const getCalculateScoreUrl = () => {
+  return `/api/creditalt/score`;
+};
+
+export const calculateScore = async (
+  scoreRequest: ScoreRequest,
+  options?: RequestInit,
+): Promise<ScoreResult> => {
+  return customFetch<ScoreResult>(getCalculateScoreUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(scoreRequest),
+  });
+};
+
+export const getCalculateScoreMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calculateScore>>,
+    TError,
+    { data: BodyType<ScoreRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof calculateScore>>,
+  TError,
+  { data: BodyType<ScoreRequest> },
+  TContext
+> => {
+  const mutationKey = ["calculateScore"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof calculateScore>>,
+    { data: BodyType<ScoreRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return calculateScore(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CalculateScoreMutationResult = NonNullable<
+  Awaited<ReturnType<typeof calculateScore>>
+>;
+export type CalculateScoreMutationBody = BodyType<ScoreRequest>;
+export type CalculateScoreMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Calculate credit risk score
+ */
+export const useCalculateScore = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calculateScore>>,
+    TError,
+    { data: BodyType<ScoreRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof calculateScore>>,
+  TError,
+  { data: BodyType<ScoreRequest> },
+  TContext
+> => {
+  return useMutation(getCalculateScoreMutationOptions(options));
+};

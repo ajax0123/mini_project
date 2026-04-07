@@ -14,3 +14,78 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Uploads a document and uses Claude to extract financial data
+ * @summary Scan a financial document using AI
+ */
+export const ScanDocumentBody = zod.object({
+  file: zod.instanceof(File),
+  documentType: zod.string(),
+});
+
+export const ScanDocumentResponse = zod.object({
+  documentType: zod.string(),
+  detectedType: zod.string(),
+  confidence: zod.number(),
+  extractedData: zod.object({
+    monthlyIncome: zod.number().nullish(),
+    avgBalance: zod.number().nullish(),
+    totalDebits: zod.number().nullish(),
+    totalCredits: zod.number().nullish(),
+    upiTransactionCount: zod.number().nullish(),
+    billAmount: zod.number().nullish(),
+    billPaidOnTime: zod.boolean().nullish(),
+    subscriptionActive: zod.boolean().nullish(),
+    subscriptionPlatform: zod.string().nullish(),
+    subscriptionAmount: zod.number().nullish(),
+    rentAmount: zod.number().nullish(),
+    rentPaidOnTime: zod.boolean().nullish(),
+    employerName: zod.string().nullish(),
+    employmentType: zod.string().nullish(),
+    insurancePremium: zod.number().nullish(),
+    insurancePaidOnTime: zod.boolean().nullish(),
+    missedPayments: zod.number().nullish(),
+    anomalyFlags: zod.array(zod.string()).optional(),
+  }),
+  derivedScores: zod.object({
+    txnScore: zod.number().optional(),
+    utilityScore: zod.number().optional(),
+    rentScore: zod.number().optional(),
+    insuranceScore: zod.number().optional(),
+    employmentStability: zod.number().optional(),
+  }),
+  warnings: zod.array(zod.string()),
+});
+
+/**
+ * Calculates credit eligibility based on financial profile
+ * @summary Calculate credit risk score
+ */
+export const CalculateScoreBody = zod.object({
+  surplus: zod.number(),
+  txnScore: zod.number(),
+  utilityScore: zod.number(),
+  rentScore: zod.number(),
+  insuranceScore: zod.number(),
+  employmentStability: zod.number(),
+  avgBalance: zod.number(),
+  balanceMultiplier: zod.number(),
+  missed30DaysFlag: zod.number(),
+  shockFlag: zod.number(),
+  emiFlag: zod.number(),
+});
+
+export const CalculateScoreResponse = zod.object({
+  riskLabel: zod.enum(["Low", "Medium", "High"]),
+  riskNorm: zod.number(),
+  eligibleAmount: zod.number(),
+  lowerBound: zod.number(),
+  upperBound: zod.number(),
+  featureContributions: zod.array(
+    zod.object({
+      feature: zod.string(),
+      value: zod.number(),
+    }),
+  ),
+});

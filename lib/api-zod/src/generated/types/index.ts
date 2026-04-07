@@ -6,4 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./derivedScores";
+export * from "./errorResponse";
+export * from "./extractedData";
+export * from "./featureContribution";
 export * from "./healthStatus";
+export * from "./scanDocumentBody";
+export * from "./scanResult";
+export * from "./scoreRequest";
+export * from "./scoreResult";
+export * from "./scoreResultRiskLabel";

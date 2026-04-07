@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: creditalt
+    description: CreditAlt credit scoring operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /creditalt/scan-document:
+    post:
+      operationId: scanDocument
+      tags: [creditalt]
+      summary: Scan a financial document using AI
+      description: Uploads a document and uses Claude to extract financial data
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                documentType:
+                  type: string
+              required:
+                - file
+                - documentType
+      responses:
+        "200":
+          description: Scan result with extracted data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creditalt/score:
+    post:
+      operationId: calculateScore
+      tags: [creditalt]
+      summary: Calculate credit risk score
+      description: Calculates credit eligibility based on financial profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScoreRequest"
+      responses:
+        "200":
+          description: Credit score result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +104,185 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    ExtractedData:
+      type: object
+      properties:
+        monthlyIncome:
+          type: number
+          nullable: true
+        avgBalance:
+          type: number
+          nullable: true
+        totalDebits:
+          type: number
+          nullable: true
+        totalCredits:
+          type: number
+          nullable: true
+        upiTransactionCount:
+          type: number
+          nullable: true
+        billAmount:
+          type: number
+          nullable: true
+        billPaidOnTime:
+          type: boolean
+          nullable: true
+        subscriptionActive:
+          type: boolean
+          nullable: true
+        subscriptionPlatform:
+          type: string
+          nullable: true
+        subscriptionAmount:
+          type: number
+          nullable: true
+        rentAmount:
+          type: number
+          nullable: true
+        rentPaidOnTime:
+          type: boolean
+          nullable: true
+        employerName:
+          type: string
+          nullable: true
+        employmentType:
+          type: string
+          nullable: true
+        insurancePremium:
+          type: number
+          nullable: true
+        insurancePaidOnTime:
+          type: boolean
+          nullable: true
+        missedPayments:
+          type: number
+          nullable: true
+        anomalyFlags:
+          type: array
+          items:
+            type: string
+
+    DerivedScores:
+      type: object
+      properties:
+        txnScore:
+          type: number
+        utilityScore:
+          type: number
+        rentScore:
+          type: number
+        insuranceScore:
+          type: number
+        employmentStability:
+          type: number
+
+    ScanResult:
+      type: object
+      properties:
+        documentType:
+          type: string
+        detectedType:
+          type: string
+        confidence:
+          type: number
+        extractedData:
+          $ref: "#/components/schemas/ExtractedData"
+        derivedScores:
+          $ref: "#/components/schemas/DerivedScores"
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+        - documentType
+        - detectedType
+        - confidence
+        - extractedData
+        - derivedScores
+        - warnings
+
+    FeatureContribution:
+      type: object
+      properties:
+        feature:
+          type: string
+        value:
+          type: number
+      required:
+        - feature
+        - value
+
+    ScoreRequest:
+      type: object
+      properties:
+        surplus:
+          type: number
+        txnScore:
+          type: number
+        utilityScore:
+          type: number
+        rentScore:
+          type: number
+        insuranceScore:
+          type: number
+        employmentStability:
+          type: number
+        avgBalance:
+          type: number
+        balanceMultiplier:
+          type: number
+        missed30DaysFlag:
+          type: number
+        shockFlag:
+          type: number
+        emiFlag:
+          type: number
+      required:
+        - surplus
+        - txnScore
+        - utilityScore
+        - rentScore
+        - insuranceScore
+        - employmentStability
+        - avgBalance
+        - balanceMultiplier
+        - missed30DaysFlag
+        - shockFlag
+        - emiFlag
+
+    ScoreResult:
+      type: object
+      properties:
+        riskLabel:
+          type: string
+          enum: [Low, Medium, High]
+        riskNorm:
+          type: number
+        eligibleAmount:
+          type: number
+        lowerBound:
+          type: number
+        upperBound:
+          type: number
+        featureContributions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureContribution"
+      required:
+        - riskLabel
+        - riskNorm
+        - eligibleAmount
+        - lowerBound
+        - upperBound
+        - featureContributions
