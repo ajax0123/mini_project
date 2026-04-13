@@ -1,8 +1,9 @@
 import type { Request, Response } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 export async function scanDocumentRoute(req: Request, res: Response) {
   try {
+    const { anthropic } = await import("@workspace/integrations-anthropic-ai");
+
     const contentType = req.headers["content-type"] || "";
     if (!contentType.includes("multipart/form-data")) {
       res.status(400).json({ error: "Bad request", message: "Expected multipart/form-data" });

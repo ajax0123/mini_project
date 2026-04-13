@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
-import { CalculateScoreBody } from "@workspace/api-zod";
+import { CalculateScoreBody, CalculateScoreResponse } from "@workspace/api-zod";
+
+const FASTAPI_URL = (process.env["FASTAPI_URL"] ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 
 export async function scoreRoute(req: Request, res: Response) {
   const parsed = CalculateScoreBody.safeParse(req.body);
@@ -9,46 +11,45 @@ export async function scoreRoute(req: Request, res: Response) {
     return;
   }
 
-  const d = parsed.data;
-  const balanceFactor = ([0.7, 1.0, 1.3][d.balanceMultiplier] as number) ?? 1.0;
+  try {
+    const upstream = await fetch(`${FASTAPI_URL}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed.data),
+      signal: AbortSignal.timeout(10_000),
+    });
 
-  const riskNorm = Math.min(
-    1,
-    d.missed30DaysFlag * 0.30 +
-    d.shockFlag * 0.25 +
-    ((5 - d.txnScore) / 5) * 0.15 +
-    ((5 - d.utilityScore) / 5) * 0.15 +
-    ((5 - d.employmentStability) / 5) * 0.10 +
-    d.emiFlag * 0.05
-  );
+    if (!upstream.ok) {
+      const errorBody = await upstream.text();
+      req.log?.error(
+        { status: upstream.status, body: errorBody },
+        "FastAPI model service error",
+      );
+      res.status(502).json({
+        error: "Model service unavailable",
+        message: "Prediction service failed to respond successfully",
+      });
+      return;
+    }
 
-  const base =
-    (d.surplus * 0.30 +
-      d.txnScore * 8000 +
-      d.rentScore * 5000 +
-      d.utilityScore * 5000 +
-      d.insuranceScore * 4000 +
-      d.employmentStability * 10000 +
-      d.avgBalance * 0.05) * balanceFactor - riskNorm * 60000;
+    const json = await upstream.json();
+    const validated = CalculateScoreResponse.safeParse(json);
 
-  const eligible = Math.max(0, Math.min(base * 0.9, 500000));
+    if (!validated.success) {
+      req.log?.error({ zodError: validated.error.message }, "Invalid prediction payload from model service");
+      res.status(502).json({
+        error: "Model service response invalid",
+        message: "Prediction payload did not match expected schema",
+      });
+      return;
+    }
 
-  const result = {
-    riskLabel: riskNorm < 0.3 ? "Low" : riskNorm < 0.6 ? "Medium" : "High",
-    riskNorm,
-    eligibleAmount: eligible,
-    lowerBound: eligible * 0.9,
-    upperBound: Math.min(eligible * 1.1, 500000),
-    featureContributions: [
-      { feature: "Surplus Income", value: d.surplus * 0.30 },
-      { feature: "Transaction Habit", value: d.txnScore * 8000 },
-      { feature: "Utility Payments", value: d.utilityScore * 5000 },
-      { feature: "Rent Regularity", value: d.rentScore * 5000 },
-      { feature: "Job Stability", value: d.employmentStability * 10000 },
-      { feature: "Insurance", value: d.insuranceScore * 4000 },
-      { feature: "Risk Penalty", value: -(riskNorm * 60000) },
-    ],
-  };
-
-  res.json(result);
+    res.json(validated.data);
+  } catch (err) {
+    req.log?.error({ err }, "Error calling model service");
+    res.status(502).json({
+      error: "Model service unavailable",
+      message: "Unable to reach prediction service",
+    });
+  }
 }

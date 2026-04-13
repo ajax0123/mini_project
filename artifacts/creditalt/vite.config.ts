@@ -5,6 +5,7 @@ import path from "path";
 
 const port = Number(process.env.PORT) || 5173;
 const basePath = process.env.BASE_PATH || "/";
+const apiTarget = process.env.VITE_API_TARGET || "http://127.0.0.1:3000";
 
 export default defineConfig({
   base: basePath,
@@ -28,6 +29,12 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port,
